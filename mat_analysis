@@ -1,0 +1,64 @@
+---
+title: "Test"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+Load up CSAT data and merge with grant ID
+REACH_data11_12
+SBIRT_data11_12
+SPARS_rawdata_11.13.2020_C-MAT
+```{r}
+setwd("T:/CRI_Research/telehealth_evaluation/CCHBC_big_picture/social_determinants_of_health_docs/Data/mat_data")
+reach = read.csv("REACH_data11_12.csv", header = TRUE)
+sbirt = read.csv("SBIRT_data11_12.csv", header = TRUE)
+c_mat = read.csv("SPARS_rawdata_11.13.2020_C-MAT.csv", header = TRUE)
+
+reach$grant = rep("reach", dim(reach)[1])
+sbirt$grant = rep("sbirt", dim(sbirt)[1])
+c_mat$grant = rep("c_mat", dim(c_mat)[1])
+reach_c_mat = rbind(reach, c_mat)
+names(reach_c_mat) == names(sbirt)
+### Keep 1 through 262 and the last column or grant
+reach_c_mat = reach_c_mat[,c(1:262,335)]
+sbirt =  sbirt[,c(1:262,348)]
+csat = rbind(reach_c_mat, sbirt)
+### Keep baseline and follow-up
+csat$ConductedInterview
+csat = subset(csat, InterviewType == 1 | InterviewType == 2)
+### Only include those who we conducted an interview for
+library(lubridate)
+csat$InterviewDate = mdy(csat$InterviewDate)
+range(csat$InterviewDate, na.rm = TRUE)
+######## Keep only the relevant variables
+csat
+# ClientID
+csat = csat[c("ClientID", "InterviewType", "InterviewDate", "Icd10CodeOne", "Age", "Employment", "Gender", "HispanicLatino", "Veteran", "RaceWhite", "DAUseAlcoholDays", "DAUseIllegDrugsDays", "CocaineCrackDays", "MarijuanaHashDays", "OpiatesHeroinDays", "OpiatesMorphineDays", "OpiatesDiluadidDays", "OpiatesDemerolDays", "OpiatesPercocetDays", "OpiatesDarvonDays", "OpiatesCodeineDays", "OpiatesTylenolDays", "OpiatesOxycoDays", "NonPresMethadoneDays", "HallucPsychDays", "MethamDays", "BenzodiazepinesDays", "BarbituatesDays", "NonPrescGhbDays", "KetamineDays", "OtherTranquilizersDays", "InhalantsDays", "OtherIllegalDrugsDays", "InjectedDrugs", "LivingWhere", "LivingConditionsSatisfaction", "ImpactStress", "ImpactActivity", "ImpactEmotional", "EducationYears", "ArrestedDays", "NrCrimes", "InpatientPhysicalNights", "InpatientMentalNights")]
+#### Change -1's for the healthcare utilization to 0's 
+
+#### Make all negative numbers NAs now
+
+### Get matched pairs
+csat_base = subset(csat,InterviewType == 1)
+csat_month6 = subset(csat, InterviewType == 2)
+
+csat_matched = merge(csat_base, csat_month6, by = "ClientID", all.y = TRUE)
+dim(csat_matched)
+csat_matched
+```
+Find differences between the data sets
+```{r}
+
+
+```
+
+
+Load up CMHS 
+ACT Data 11 NOV 20
+
+
+
+Load of REDCap data
+REDCap_rawdata_11.13.2020_C-MAT
