@@ -113,6 +113,8 @@ barc_10_mat = barc_10_mat %>%
   filter(time <= 2) %>%
   filter(AssessmentDate <= "2020-2-28" | AssessmentDate >= "2020-04-01")
 
+#Successfully removed March
+#barc_10_mat[order(barc_10_mat$AssessmentDate),][1200:1300,]
 
   
 test_view =  test[c("SourceClient_ID", "time")]
