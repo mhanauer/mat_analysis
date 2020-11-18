@@ -34,15 +34,18 @@ c_mat_clean = c_mat %>%
   drop_na()
 
 miss_var_summary(c_mat_clean)
-dim(c_mat_clean)
+
 
 ```
 CMAT descriptives
 ```{r}
-apply(c_mat_clean, 2, function(x){describe.factor(x)})
+dim(c_mat_clean)
+apply(c_mat_clean[50:60], 2, function(x){describe.factor(x)})
 summary(c_mat_clean)
 ```
 CMAT days, sat, and dep_anx just mean differences
+Sub use is in average days and depression and anxieity is in average days
+For the specifics about the type of MAT talk to Ellen
 ```{r}
 library(descr)
 library(tibble)
@@ -56,10 +59,18 @@ for(i in 1:length(means_compare_dat)){
   p_change_out[[i]] = round((out_means_compare[[i]][2,1] - out_means_compare[[i]][1,1]) / out_means_compare[[i]][1,1],2)
   wil_out[[i]] = wilcox.test(means_compare_dat[[i]] ~ c_mat_month6_complete$telehealth)
 }
-out_means_compare
-p_change_out
-wil_out
 
+out_results_list = c(out_means_compare, p_change_out, wil_out) 
+for(i in 1:length(out_results_list)){
+  
+}
+
+names(out_means_compare) = c("impact", "substance_days", "sat", "dep_anx")
+out_means_compare
+names(p_change_out) = c("impact", "substance_days", "sat", "dep_anx")
+p_change_out
+names(wil_out) = c("impact", "substance_days", "sat", "dep_anx")
+wil_out
 ```
 
 Load of REDCap data
@@ -82,6 +93,47 @@ describe.factor(c_mat_redcap_6_month$telehealth)
 #### Not enough data
 ```
 Load in BARC-10 data
+Change assessment date
+Identify duplicate BARC-10 
+Subset to only clients with three or less admins 
+Remove March
+Create telehealth variable
+Bayesian log non-inferior of 10% 
+```{r}
+setwd("T:/CRI_Research/telehealth_evaluation/mat_data")
+barc_10_mat = read.csv("CIL BARC-10 and MAT Data 2020-11-13.csv", header = TRUE)
+barc_10_mat = barc_10_mat %>%
+  mutate(id_date = paste0(SourceClient_ID, AssessmentDate)) %>%
+  ## keep the first instance of any duplicates
+  distinct(id_date, .keep_all = TRUE) %>%
+  mutate(AssessmentDate = mdy(AssessmentDate)) %>%
+  group_by(SourceClient_ID) %>% 
+    mutate(time = row_number()-1) %>%
+  ### Just filter for those who had at least 3 admins not matached pairs
+  filter(time <= 2) %>%
+  filter(AssessmentDate <= "2020-2-28" | AssessmentDate >= "2020-04-01")
+
+
+  
+test_view =  test[c("SourceClient_ID", "time")]
+test_view = test_view[order(test_view$SourceClient_ID),]
+prettyR::describe.factor(test_view$time)
+
+##### Create matched pairs
+time_0  = barc_10_mat %>%
+  filter(time == 0)
+
+time_1 = barc_10_mat %>%
+  filter(time == 1)
+
+time_2 = barc_10_mat %>%
+  filter(time == 2)
+time_2
+
+
+
+```
+
 
 
 
