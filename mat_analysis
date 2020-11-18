@@ -6,53 +6,41 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
-Load up CSAT data and merge with grant ID
-REACH_data11_12
-SBIRT_data11_12
-SPARS_rawdata_11.13.2020_C-MAT
+CMAT data
+Loading data and cleaning
 ```{r}
+library(lubridate)
+library(dplyr)
+library(naniar)
+library(tidyr)
 setwd("T:/CRI_Research/telehealth_evaluation/CCHBC_big_picture/social_determinants_of_health_docs/Data/mat_data")
 c_mat = read.csv("SPARS_rawdata_11.13.2020_C-MAT.csv", header = TRUE, na.strings = c(-9, -1, -8, -7, -6, -5))
-c_mat
 
-c_mat = subset(c_mat, InterviewType == 1 | InterviewType == 2)
-### Only include those who we conducted an interview for
-library(lubridate)
-c_mat$InterviewDate = mdy(c_mat$InterviewDate)
-range(c_mat$InterviewDate, na.rm = TRUE)
-### Create telehealth variable
-c_mat$telehealth = ifelse(c_mat$InterviewDate >= "2020-04-01", 1, 0)
-######## Keep only the relevant variables
-# ClientID
-c_mat = c_mat[c("ClientID", "InterviewType", "InterviewDate", "Icd10CodeOne", "Age", "Employment", "Gender", "HispanicLatino", "Veteran", "RaceWhite", "DAUseAlcoholDays", "DAUseIllegDrugsDays", "CocaineCrackDays", "MarijuanaHashDays", "OpiatesHeroinDays", "OpiatesMorphineDays", "OpiatesDiluadidDays", "OpiatesDemerolDays", "OpiatesPercocetDays", "OpiatesDarvonDays", "OpiatesCodeineDays", "OpiatesTylenolDays", "OpiatesOxycoDays", "NonPresMethadoneDays", "HallucPsychDays", "MethamDays", "BenzodiazepinesDays", "BarbituatesDays", "NonPrescGhbDays", "KetamineDays", "OtherTranquilizersDays", "InhalantsDays", "OtherIllegalDrugsDays", "InjectedDrugs", "LivingWhere", "LivingConditionsSatisfaction", "ImpactStress", "ImpactActivity", "ImpactEmotional", "EducationYears", "ArrestedDays", "NrCrimes", "LifeQuality", "HealthSatisfaction", "EnoughEnergyForEverydayLife", "PerformDailyActivitiesSatisfaction", "SelfSatisfaction", "Depression", "Anxiety", "ViolentBehavior", "Suicide", "PsycholEmotMedication", "PsycholEmotImpact", "AnyViolence", "PhysicallyHurt", "telehealth")]
-### Get just 6-month data
-c_mat_month6 = subset(c_mat, InterviewType == 2)
-## Get rid of NAs in Interview date
-c_mat_month6 = subset(c_mat_month6, InterviewDate > "2000-01-01")
-c_mat_month6$telehealth = ifelse(c_mat_month6$InterviewDate >= "2020-04-01", 1, 0)
+c_mat_clean = c_mat %>%
+  ### Only 6-months data because you don't have enough for pre and post with telehealth
+  filter(InterviewType == 2) %>%
+  mutate(InterviewDate = mdy(InterviewDate)) %>%
+  ### Remove data with NAs for dates
+  filter(InterviewDate > "2000-01-01") %>%
+  mutate(telehealth = if_else(InterviewDate >= "2020-04-01", 1, 0)) %>%
+  select(ClientID, InterviewType, InterviewDate, Icd10CodeOne, Age, Employment, Gender, HispanicLatino, RaceWhite, DAUseAlcoholDays, DAUseIllegDrugsDays, CocaineCrackDays, MarijuanaHashDays, OpiatesHeroinDays, OpiatesMorphineDays, OpiatesDiluadidDays, OpiatesDemerolDays, OpiatesPercocetDays, OpiatesDarvonDays, OpiatesCodeineDays, OpiatesTylenolDays, OpiatesOxycoDays, NonPresMethadoneDays, HallucPsychDays, MethamDays, BenzodiazepinesDays, BarbituatesDays, NonPrescGhbDays, KetamineDays, OtherTranquilizersDays, InhalantsDays, OtherIllegalDrugsDays, InjectedDrugs, LivingWhere, LivingConditionsSatisfaction, ImpactStress, ImpactActivity, ImpactEmotional, EducationYears, ArrestedDays, NrCrimes, LifeQuality, HealthSatisfaction, EnoughEnergyForEverydayLife, PerformDailyActivitiesSatisfaction, SelfSatisfaction, Depression, Anxiety, ViolentBehavior, Suicide, PsycholEmotMedication, PsycholEmotImpact, AnyViolence, PhysicallyHurt, telehealth) %>%
+  rowwise() %>% 
+      mutate(
+        substance_days = mean(c_across(11:33)),
+        impact = mean(c_across(37:39)),
+        sat = mean(c_across(43:47)),
+        dep_anx = mean(c_across(48:49)),
+        vio_suc = mean(c_across(50:51))) %>%
+  drop_na()
 
-library(naniar)
-## Check out missingness
-miss_var_summary(c_mat_month6)
-c_mat_month6_complete = na.omit(c_mat_month6)
-describe.factor(c_mat_month6_complete$telehealth)
-### Create average variable for substance days 
-c_mat_month6_complete$substance_days = apply(c_mat_month6_complete[11:33], 1, mean)
-#### Lower numbers are better
-#### Composite score, "ImpactStress", "ImpactActivity", "ImpactEmotional"
-c_mat_month6_complete$impact = apply(c_mat_month6_complete[37:39], 1, mean)
-### satisfaction 
-c_mat_month6_complete$sat = apply(c_mat_month6_complete[43:47], 1, mean)
-### Dep and Anxeity
-c_mat_month6_complete$dep_anx = apply(c_mat_month6_complete[48:49], 1, mean)
-### violent / suicide
-c_mat_month6_complete$vio_suc = apply(c_mat_month6_complete[50:51], 1, mean)
+miss_var_summary(c_mat_clean)
+dim(c_mat_clean)
 
 ```
 CMAT descriptives
 ```{r}
-apply(c_mat_month6_complete, 2, function(x){describe.factor(x)})
-
+apply(c_mat_clean, 2, function(x){describe.factor(x)})
+summary(c_mat_clean)
 ```
 CMAT days, sat, and dep_anx just mean differences
 ```{r}
@@ -60,19 +48,19 @@ library(descr)
 library(tibble)
 means_compare_dat = c_mat_month6_complete[c("impact", "substance_days", "sat", "dep_anx")]
 out_means_compare = list()
+p_change_out = list()
+wil_out = list()
 
 for(i in 1:length(means_compare_dat)){
   out_means_compare[[i]] = compmeans(means_compare_dat[[i]], c_mat_month6_complete$telehealth)
+  p_change_out[[i]] = round((out_means_compare[[i]][2,1] - out_means_compare[[i]][1,1]) / out_means_compare[[i]][1,1],2)
+  wil_out[[i]] = wilcox.test(means_compare_dat[[i]] ~ c_mat_month6_complete$telehealth)
 }
-
 out_means_compare
+p_change_out
+wil_out
 
 ```
-
-
-
-
-
 
 Load of REDCap data
 REDCap_rawdata_11.13.2020_C-MAT
