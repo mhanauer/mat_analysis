@@ -13,6 +13,7 @@ library(lubridate)
 library(dplyr)
 library(naniar)
 library(tidyr)
+library(prettyR)
 setwd("T:/CRI_Research/telehealth_evaluation/CCHBC_big_picture/social_determinants_of_health_docs/Data/mat_data")
 c_mat = read.csv("SPARS_rawdata_11.13.2020_C-MAT.csv", header = TRUE, na.strings = c(-9, -1, -8, -7, -6, -5))
 
@@ -23,55 +24,84 @@ c_mat_clean = c_mat %>%
   ### Remove data with NAs for dates
   filter(InterviewDate > "2000-01-01") %>%
   mutate(telehealth = if_else(InterviewDate >= "2020-04-01", 1, 0)) %>%
-  select(ClientID, InterviewType, InterviewDate, Icd10CodeOne, Age, Employment, Gender, HispanicLatino, RaceWhite, DAUseAlcoholDays, DAUseIllegDrugsDays, CocaineCrackDays, MarijuanaHashDays, OpiatesHeroinDays, OpiatesMorphineDays, OpiatesDiluadidDays, OpiatesDemerolDays, OpiatesPercocetDays, OpiatesDarvonDays, OpiatesCodeineDays, OpiatesTylenolDays, OpiatesOxycoDays, NonPresMethadoneDays, HallucPsychDays, MethamDays, BenzodiazepinesDays, BarbituatesDays, NonPrescGhbDays, KetamineDays, OtherTranquilizersDays, InhalantsDays, OtherIllegalDrugsDays, InjectedDrugs, LivingWhere, LivingConditionsSatisfaction, ImpactStress, ImpactActivity, ImpactEmotional, EducationYears, ArrestedDays, NrCrimes, LifeQuality, HealthSatisfaction, EnoughEnergyForEverydayLife, PerformDailyActivitiesSatisfaction, SelfSatisfaction, Depression, Anxiety, ViolentBehavior, Suicide, PsycholEmotMedication, PsycholEmotImpact, AnyViolence, PhysicallyHurt, telehealth) %>%
+  dplyr::select(ClientID, InterviewType, InterviewDate, Icd10CodeOne, Age, EmployStatus, Gender, HispanicLatino, RaceWhite, DAUseAlcoholDays, DAUseIllegDrugsDays, CocaineCrackDays, MarijuanaHashDays, OpiatesHeroinDays, OpiatesMorphineDays, OpiatesDiluadidDays, OpiatesDemerolDays, OpiatesPercocetDays, OpiatesDarvonDays, OpiatesCodeineDays, OpiatesTylenolDays, OpiatesOxycoDays, NonPresMethadoneDays, HallucPsychDays, MethamDays, BenzodiazepinesDays, BarbituatesDays, NonPrescGhbDays, KetamineDays, OtherTranquilizersDays, InhalantsDays, OtherIllegalDrugsDays, InjectedDrugs, LivingWhere, LivingConditionsSatisfaction, ImpactStress, ImpactActivity, ImpactEmotional, EducationYears, ArrestedDays, NrCrimes, LifeQuality, HealthSatisfaction, EnoughEnergyForEverydayLife, PerformDailyActivitiesSatisfaction, SelfSatisfaction, Depression, Anxiety, ViolentBehavior, Suicide, PsycholEmotMedication, PsycholEmotImpact, AnyViolence, PhysicallyHurt, telehealth) %>%
   rowwise() %>% 
       mutate(
         substance_days = mean(c_across(11:33)),
-        impact = mean(c_across(37:39)),
-        sat = mean(c_across(43:47)),
-        dep_anx = mean(c_across(48:49)),
-        vio_suc = mean(c_across(50:51))) %>%
+        sat = mean(c_across(43:46)),
+        dep_anx = mean(c_across(47:48))) %>%
+  ### Reverse code sat so higher values are better
+  mutate(sat = 6-sat) %>%
+  ### Make 1 and 2 employed part time or full time
+  mutate(employed_bin = case_when(
+    EmployStatus == 1 ~ 1, 
+    EmployStatus == 2 ~ 1,
+    TRUE ~ 0)) %>%
   drop_na()
-
-miss_var_summary(c_mat_clean)
+  
+c_mat_clean %>%
+  dplyr::select(EmployStatus, employed_bin)
 
 
 ```
 CMAT descriptives
 ```{r}
 dim(c_mat_clean)
-apply(c_mat_clean[50:60], 2, function(x){describe.factor(x)})
+apply(c_mat_clean[50:58], 2, function(x){describe.factor(x)})
 summary(c_mat_clean)
 ```
 CMAT days, sat, and dep_anx just mean differences
-Sub use is in average days and depression and anxieity is in average days
+Sub use is in average days and depression and anxiety is in average days
 For the specifics about the type of MAT talk to Ellen
 ```{r}
 library(descr)
 library(tibble)
-means_compare_dat = c_mat_month6_complete[c("impact", "substance_days", "sat", "dep_anx")]
+means_compare_dat = c_mat_clean[c("substance_days", "sat", "dep_anx")]
 out_means_compare = list()
 p_change_out = list()
 wil_out = list()
 
 for(i in 1:length(means_compare_dat)){
-  out_means_compare[[i]] = compmeans(means_compare_dat[[i]], c_mat_month6_complete$telehealth)
+  out_means_compare[[i]] = compmeans(means_compare_dat[[i]], c_mat_clean$telehealth)
   p_change_out[[i]] = round((out_means_compare[[i]][2,1] - out_means_compare[[i]][1,1]) / out_means_compare[[i]][1,1],2)
-  wil_out[[i]] = wilcox.test(means_compare_dat[[i]] ~ c_mat_month6_complete$telehealth)
+  wil_out[[i]] = wilcox.test(means_compare_dat[[i]] ~ c_mat_clean$telehealth)
 }
 
-out_results_list = c(out_means_compare, p_change_out, wil_out) 
-for(i in 1:length(out_results_list)){
-  
-}
-
-names(out_means_compare) = c("impact", "substance_days", "sat", "dep_anx")
+names(out_means_compare) = c("substance_days", "sat", "dep_anx")
 out_means_compare
-names(p_change_out) = c("impact", "substance_days", "sat", "dep_anx")
+names(p_change_out) = c("substance_days", "sat", "dep_anx" )
 p_change_out
-names(wil_out) = c("impact", "substance_days", "sat", "dep_anx")
+names(wil_out) = c("substance_days", "sat", "dep_anx")
 wil_out
 ```
+Try IPW weighting with log of Bayesian t-test
+
+ClientID, InterviewType, InterviewDate, Icd10CodeOne, Age, Employment, Gender, HispanicLatino, RaceWhite, DAUseAlcoholDays, DAUseIllegDrugsDays, CocaineCrackDays, MarijuanaHashDays, OpiatesHeroinDays, OpiatesMorphineDays, OpiatesDiluadidDays, OpiatesDemerolDays, OpiatesPercocetDays, OpiatesDarvonDays, OpiatesCodeineDays, OpiatesTylenolDays, OpiatesOxycoDays, NonPresMethadoneDays, HallucPsychDays, MethamDays, BenzodiazepinesDays, BarbituatesDays, NonPrescGhbDays, KetamineDays, OtherTranquilizersDays, InhalantsDays, OtherIllegalDrugsDays, InjectedDrugs, LivingWhere, LivingConditionsSatisfaction, ImpactStress, ImpactActivity, ImpactEmotional, EducationYears, ArrestedDays, NrCrimes, LifeQuality, HealthSatisfaction, EnoughEnergyForEverydayLife, PerformDailyActivitiesSatisfaction, SelfSatisfaction, Depression, Anxiety, ViolentBehavior, Suicide, PsycholEmotMedication, PsycholEmotImpact, AnyViolence, PhysicallyHurt, telehealth
+
+```{r}
+library(pscl)
+c_mat_clean
+ipw_cmat = glm(telehealth ~  Age + employed_bin + Gender + RaceWhite + substance_days + sat + dep_anx, data = clean_compare_dat_long, family = "binomial")
+predict_treat_prob = predict(ipw_cmat, type = "response")
+ipw_var = 1/predict_treat_prob
+### Don't seem to be any outliers in the weights 
+range(scale(ipw_var))
+### With 400 samples we expect a few samples (6) to be at or above 3  and only 3.9
+describe.factor(scale(ipw_var))
+
+c_mat_clean = cbind(clean_compare_dat_long, ipw_var)
+
+test_model_freq = lm(log() ~, data = clean_compare_dat_long,  weights = ipw_var)
+summary(test_model_freq)
+
+sub_hurdle = hurdle(substance_days ~ 1 , data = c_mat_clean, dist = "negbin", zero.dist = "binomial", weights = ipw_var)
+
+sat_log_lin = glm(log(sat) ~ 1 , data = c_mat_clean, weights = ipw_var)
+
+dep_anx_hurdle = hurdle(dep_anx ~ 1 , data = c_mat_clean, dist = "negbin", zero.dist = "binomial", weights = ipw_var)
+
+```
+
 
 Load of REDCap data
 REDCap_rawdata_11.13.2020_C-MAT
@@ -140,12 +170,7 @@ library(reshape2)
 barc_10_mat_clean_long =  reshape(time_0_1_2, varying = list(c("AssessmentDate.x", "AssessmentDate.y", "AssessmentDate"), c("rcs_10_item_score.x", "rcs_10_item_score.y", "rcs_10_item_score"), c("rle_days_hosp_med.x", "rle_days_hosp_med.y", "rle_days_hosp_med"), c("rle_days_hosp_psych.x", "rle_days_hosp_psych.y", "rle_days_hosp_psych"),c("rle_er_visits.x", "rle_er_visits.y", "rle_er_visits"), c("time.x", "time.y", "time"),  c("telehealth.x", "telehealth.y", "telehealth"), c("face_to_face.x", "face_to_face.y", "face_to_face")), times = c(0,1,2), direction = "long")
 barc_10_mat_clean_long
 ```
-Non-inferiority analysis with Bayesian 
-Try without log 
-rowwise() %>% 
-      mutate(
-        substance_days = mean(c_across(11:33))
-        
+
 Do this earlier clean data
 ```{r}
 apply(barc_10_mat_clean_long[5:7], 2, function(x){describe.factor(x)})
