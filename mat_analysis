@@ -25,7 +25,7 @@ c_mat_clean = c_mat %>%
   filter(InterviewDate > "2000-01-01") %>%
   mutate(telehealth = if_else(InterviewDate >= "2020-04-01", 1, 0)) %>%
   dplyr::select(ClientID, InterviewType, InterviewDate, Icd10CodeOne, Age, EmployStatus, Gender, HispanicLatino, RaceWhite, DAUseAlcoholDays, DAUseIllegDrugsDays, CocaineCrackDays, MarijuanaHashDays, OpiatesHeroinDays, OpiatesMorphineDays, OpiatesDiluadidDays, OpiatesDemerolDays, OpiatesPercocetDays, OpiatesDarvonDays, OpiatesCodeineDays, OpiatesTylenolDays, OpiatesOxycoDays, NonPresMethadoneDays, HallucPsychDays, MethamDays, BenzodiazepinesDays, BarbituatesDays, NonPrescGhbDays, KetamineDays, OtherTranquilizersDays, InhalantsDays, OtherIllegalDrugsDays, InjectedDrugs, LivingWhere, LivingConditionsSatisfaction, ImpactStress, ImpactActivity, ImpactEmotional, EducationYears, ArrestedDays, NrCrimes, LifeQuality, HealthSatisfaction, EnoughEnergyForEverydayLife, PerformDailyActivitiesSatisfaction, SelfSatisfaction, Depression, Anxiety, ViolentBehavior, Suicide, PsycholEmotMedication, PsycholEmotImpact, AnyViolence, PhysicallyHurt, telehealth) %>%
-  rowwise() %>% 
+  rowwise()%>%
       mutate(
         substance_days = mean(c_across(11:33)),
         sat = mean(c_across(43:46)),
@@ -38,10 +38,9 @@ c_mat_clean = c_mat %>%
     EmployStatus == 2 ~ 1,
     TRUE ~ 0)) %>%
   drop_na()
-  
-c_mat_clean %>%
-  dplyr::select(EmployStatus, employed_bin)
 
+c_mat_clean %>%
+  select(47:48)
 
 ```
 CMAT descriptives
@@ -80,8 +79,9 @@ ClientID, InterviewType, InterviewDate, Icd10CodeOne, Age, Employment, Gender, H
 
 ```{r}
 library(pscl)
+library(rstanarm)
 c_mat_clean
-ipw_cmat = glm(telehealth ~  Age + employed_bin + Gender + RaceWhite + substance_days + sat + dep_anx, data = clean_compare_dat_long, family = "binomial")
+ipw_cmat = glm(telehealth ~  Age + employed_bin + Gender + RaceWhite + substance_days + sat + dep_anx, data = c_mat_clean, family = "binomial")
 predict_treat_prob = predict(ipw_cmat, type = "response")
 ipw_var = 1/predict_treat_prob
 ### Don't seem to be any outliers in the weights 
@@ -89,39 +89,30 @@ range(scale(ipw_var))
 ### With 400 samples we expect a few samples (6) to be at or above 3  and only 3.9
 describe.factor(scale(ipw_var))
 
-c_mat_clean = cbind(clean_compare_dat_long, ipw_var)
+c_mat_clean = cbind(c_mat_clean, ipw_var)
 
-test_model_freq = lm(log() ~, data = clean_compare_dat_long,  weights = ipw_var)
+test_model_freq = lm(log(sat) ~ 1, data = c_mat_clean,  weights = ipw_var)
 summary(test_model_freq)
 
-sub_hurdle = hurdle(substance_days ~ 1 , data = c_mat_clean, dist = "negbin", zero.dist = "binomial", weights = ipw_var)
+sub = hurdle(substance_days ~ 1 , data = c_mat_clean, dist = "negbin", zero.dist = "binomial", weights = ipw_var)
 
-sat_log_lin = glm(log(sat) ~ 1 , data = c_mat_clean, weights = ipw_var)
+sat_log_lin = glm(log(sat) ~ telehealth , data = c_mat_clean, weights = ipw_var)
+summary(sat_log_lin)
 
-dep_anx_hurdle = hurdle(dep_anx ~ 1 , data = c_mat_clean, dist = "negbin", zero.dist = "binomial", weights = ipw_var)
+c_mat_clean = c_mat_clean %>%
+  mutate(dep_anx_1 = dep_anx +1)
+
+dep_anx_log_lin = glm(log(dep_anx_1) ~ telehealth , data = c_mat_clean, weights = ipw_var)
+summary(dep_anx_log_lin)
+
+dep_anx_lin_lin = glm(dep_anx_1 ~ telehealth , data = c_mat_clean, weights = ipw_var)
+summary(dep_anx_lin_lin)
+
 
 ```
 
 
-Load of REDCap data
-REDCap_rawdata_11.13.2020_C-MAT
-```{r}
-setwd("T:/CRI_Research/telehealth_evaluation/CCHBC_big_picture/social_determinants_of_health_docs/Data/mat_data")
 
-c_mat_redcap = read.csv("REDCap_rawdata_11.13.2020_C-MAT.csv", header = TRUE)
-head(c_mat_redcap)
-c_mat_redcap_6_month = subset(c_mat_redcap,redcap_event_name  == "6_month_followup_arm_1")
-dim(c_mat_redcap_6_month)
-c_mat_redcap_6_month$ssi_aod_date  = mdy(c_mat_redcap_6_month$ssi_aod_date) 
-range(c_mat_redcap_6_month$ssi_aod_date, na.rm = TRUE)
-
-c_mat_redcap_6_month = subset(c_mat_redcap_6_month, ssi_aod_date > "2000-01-01") 
-c_mat_redcap_6_month$telehealth = ifelse(c_mat_redcap_6_month$ssi_aod_date >= "2020-04-01", 1, 0)
-library(prettyR)
-dim(c_mat_redcap_6_month)[1]
-describe.factor(c_mat_redcap_6_month$telehealth)
-#### Not enough data
-```
 Load in BARC-10 data
 Change assessment date
 Identify duplicate BARC-10 
@@ -145,9 +136,13 @@ barc_10_mat_clean = barc_10_mat %>%
   filter(time <= 2) %>%
   filter(AssessmentDate <= "2020-2-28" | AssessmentDate >= "2020-04-01") %>%
   select(SourceClient_ID, AssessmentDate, rcs_10_item_score, rle_days_hosp_med, rle_days_hosp_psych, rle_er_visits, time) %>%
+  rowwise()%>%
+    mutate(hos_er = sum(c_across(4:6))) %>%
   mutate(telehealth = if_else(AssessmentDate >= "2020-04-01", 1, 0)) %>%
-  mutate(face_to_face = if_else(AssessmentDate >= "2020-04-01", 0, 1))
-prettyR::describe.factor(barc_10_mat_clean$telehealth)
+  mutate(face_to_face = if_else(AssessmentDate >= "2020-04-01", 0, 1))%>%
+  select(!c(rle_days_hosp_med, rle_days_hosp_psych, rle_er_visits))
+
+barc_10_mat_clean
 #Successfully removed March
 #barc_10_mat[order(barc_10_mat$AssessmentDate),][1200:1300,]
 
@@ -167,41 +162,102 @@ dim(time_0_1)
 time_0_1_2 = time_0_1 %>% inner_join(time_2, by = "SourceClient_ID")
 time_0_1_2 = data.frame(time_0_1_2)
 library(reshape2)
-barc_10_mat_clean_long =  reshape(time_0_1_2, varying = list(c("AssessmentDate.x", "AssessmentDate.y", "AssessmentDate"), c("rcs_10_item_score.x", "rcs_10_item_score.y", "rcs_10_item_score"), c("rle_days_hosp_med.x", "rle_days_hosp_med.y", "rle_days_hosp_med"), c("rle_days_hosp_psych.x", "rle_days_hosp_psych.y", "rle_days_hosp_psych"),c("rle_er_visits.x", "rle_er_visits.y", "rle_er_visits"), c("time.x", "time.y", "time"),  c("telehealth.x", "telehealth.y", "telehealth"), c("face_to_face.x", "face_to_face.y", "face_to_face")), times = c(0,1,2), direction = "long")
+barc_10_mat_clean_long =  reshape(time_0_1_2, varying = list(c("AssessmentDate.x", "AssessmentDate.y", "AssessmentDate"), c("rcs_10_item_score.x", "rcs_10_item_score.y", "rcs_10_item_score"), c("hos_er.x", "hos_er.y", "hos_er"), c("time.x", "time.y", "time"),  c("telehealth.x", "telehealth.y", "telehealth"), c("face_to_face.x", "face_to_face.y", "face_to_face")), times = c(0,1,2), direction = "long")
 barc_10_mat_clean_long
 ```
 
 Do this earlier clean data
 ```{r}
-apply(barc_10_mat_clean_long[5:7], 2, function(x){describe.factor(x)})
-test =  barc_10_mat_clean_long %>%
-  rowwise() %>%
-  mutate(hos_er = sum(c_across(5:7)))
+apply(barc_10_mat_clean_long[c(2, 4:7)], 2, function(x){describe.factor(x)})
+barc_10_mat_clean_long
 ```
-Develop IPW
+Get means and percentage changes like above
+```{r}
+means_compare_dat = barc_10_mat_clean_long[c("rcs_10_item_score.x", "hos_er.x")]
+out_means_compare = list()
+p_change_out = list()
+wil_out = list()
+
+for(i in 1:length(means_compare_dat)){
+  out_means_compare[[i]] = compmeans(means_compare_dat[[i]], barc_10_mat_clean_long$telehealth.x)
+  p_change_out[[i]] = round((out_means_compare[[i]][2,1] - out_means_compare[[i]][1,1]) / out_means_compare[[i]][1,1],2)
+  wil_out[[i]] = wilcox.test(means_compare_dat[[i]] ~ barc_10_mat_clean_long$telehealth.x)
+}
+
+names(out_means_compare) = c("rcs_10_item_score.x", "hos_er.x")
+out_means_compare
+names(p_change_out) = c("rcs_10_item_score.x", "hos_er.x")
+p_change_out
+names(wil_out) = c("rcs_10_item_score.x", "hos_er.x")
+wil_out
+
+```
 
 
 Try Bayesian log with BARC-10 scores
 ```{r}
+library(rstanarm)
+my_prior = normal(location = 0, scale = exp(.2), autoscale = FALSE)
 
-my_prior = normal(location = 0, scale = .2, autoscale = FALSE)
-stan_linear_log = stan_glm(rcs_10_item_score.x ~ time*face_to_face.x + MDD.x +gender_minority.x +racial_minority.x + IL.x + FL.x + Form_DESC.x, data = clean_compare_dat_long, weights = ipw_var, prior = my_prior, seed =  124)
-stan_linear_log_sum = round(stan_linear_log$stan_summary[,c(1,3,4,10)],4)
-## To get percentage change interpretation need to exp the parameter estimates
-stan_linear_log_sum = round(exp(stan_linear_log_sum),3)
-### Creates a percentage instead 1 + % 
-stan_linear_log_sum= stan_linear_log_sum - 1
-stan_linear_log_sum
-posterior_face =  as.data.frame(stan_linear_log)
-### Reverse for percentage change
-stan_linear_log = stan_glm(log_PHQ9_Total.x ~ time*telehealth + MDD.x +gender_minority.x +racial_minority.x + IL.x + FL.x, data = clean_compare_dat_long,  seed = 124,  weights = ipw_var, prior = my_prior)
-stan_linear_log_sum = round(stan_linear_log$stan_summary[,c(1,3,4,10)],4)
-## To get percentage change interpretation need to exp the parameter estimates
-stan_linear_log_sum = round(exp(stan_linear_log_sum),3)
-### Creates a percentage instead 1 + % 
-stan_linear_log_sum= stan_linear_log_sum - 1
-stan_linear_log_sum
+stan_hcs_log = stan_glm(log(rcs_10_item_score.x) ~ time*face_to_face.x + hos_er.x, data = barc_10_mat_clean_long, seed =  124)
 
+stan_log_fun = function(dat){
+  dat = round(dat$stan_summary[,c(1,3,4,10)],4)
+  dat = data.frame(dat)
+  dat = dat %>%
+    slice(-c(dim(dat)[1]))
+  dat
+  ## To get percentage change interpretation need to exp the parameter estimates
+  dat = round(exp(dat),3)
+  ### Creates a percentage instead 1 + % 
+  dat= dat - 1
+  return(dat)
+}
+
+stan_hcs_log_sum = stan_log_fun(stan_hcs_log)
+stan_hcs_log_sum
+```
+##################
+Look into the increase in reported hospitalizations and er visits
+##############################
+Try plotting means
+```{r}
+telehealth_time_describe = barc_10_mat_clean_long %>%
+  group_by(telehealth.x, time) %>%
+  summarise_at(vars(hos_er.x), list(hos_er_mean = mean)) %>%
+  round(.,2)
+
+telehealth_time_describe
+```
+
+Try plotting means
+```{r}
+library(ggplot2)
+plot_means = ggplot(data =telehealth_time_describe, aes(x = time, y = hos_er_mean, group = telehealth.x))+
+  geom_line(aes(color = telehealth.x))+
+  geom_point(aes(color = telehealth.x))+
+  scale_y_continuous(limits = c(0,4))+
+  labs(title="Figure 2: Mean PHQ-9 total score by PHQ-9 administration \n for complete telemental health and face to face", y = "Mean PHQ-9", x = "Administration")+
+  geom_text(aes(label = hos_er_mean), position=position_dodge(width=.8), vjust=-0.20)
+plot_means$labels$colour = c("Telemental \n health")
+plot_means
+```
+
+Try hurdle model
+```{r}
+library(pscl)
+hos_er_hurdle = hurdle(hos_er.x ~ time*telehealth.x + rcs_10_item_score.x, dist = "negbin", zero.dist = "binomial", data = barc_10_mat_clean_long)
+summary(hos_er_hurdle)
+
+```
+Try Bayesian negative binomal model
+```{r}
+stan_hos_er = stan_glm.nb(hos_er.x ~ time*telehealth.x + rcs_10_item_score.x, data = barc_10_mat_clean_long, seed =  124)
+stan_hos_er_sum = round(stan_hos_er$stan_summary[,c(1,3,4,10)],4)
+exp(stan_hos_er_sum[1:5,])
+
+stan_hos_er_sum =  stan_log_fun(stan_hos_er)
+stan_hos_er_sum
 ```
 
 
