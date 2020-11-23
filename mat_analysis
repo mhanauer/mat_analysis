@@ -40,13 +40,13 @@ c_mat_clean = c_mat %>%
   drop_na()
 
 c_mat_clean %>%
-  select(47:48)
+  select(43:46)
 
 ```
 CMAT descriptives
 ```{r}
 dim(c_mat_clean)
-apply(c_mat_clean[50:58], 2, function(x){describe.factor(x)})
+apply(c_mat_clean[50:58], 2, function(x){describe.factor(x, decr.order = FALSE)})
 summary(c_mat_clean)
 ```
 CMAT days, sat, and dep_anx just mean differences
@@ -55,7 +55,8 @@ For the specifics about the type of MAT talk to Ellen
 ```{r}
 library(descr)
 library(tibble)
-means_compare_dat = c_mat_clean[c("substance_days", "sat", "dep_anx")]
+means_compare_dat = c_mat_clean %>%
+  dplyr::select(substance_days, sat, dep_anx)
 out_means_compare = list()
 p_change_out = list()
 wil_out = list()
@@ -79,35 +80,45 @@ ClientID, InterviewType, InterviewDate, Icd10CodeOne, Age, Employment, Gender, H
 
 ```{r}
 library(pscl)
-library(rstanarm)
 c_mat_clean
 ipw_cmat = glm(telehealth ~  Age + employed_bin + Gender + RaceWhite + substance_days + sat + dep_anx, data = c_mat_clean, family = "binomial")
 predict_treat_prob = predict(ipw_cmat, type = "response")
 ipw_var = 1/predict_treat_prob
 ### Don't seem to be any outliers in the weights 
 range(scale(ipw_var))
-### With 400 samples we expect a few samples (6) to be at or above 3  and only 3.9
-describe.factor(scale(ipw_var))
 
 c_mat_clean = cbind(c_mat_clean, ipw_var)
 
-test_model_freq = lm(log(sat) ~ 1, data = c_mat_clean,  weights = ipw_var)
-summary(test_model_freq)
-
-sub = hurdle(substance_days ~ 1 , data = c_mat_clean, dist = "negbin", zero.dist = "binomial", weights = ipw_var)
-
 sat_log_lin = glm(log(sat) ~ telehealth , data = c_mat_clean, weights = ipw_var)
-summary(sat_log_lin)
+
+sat_log_lin_sum = sat_log_lin %>%
+  tidy() %>%
+  mutate_at(.vars = c("estimate", "std.error"), exp) %>%
+  mutate_at(2:5, round, 3)
+sat_log_lin_sum
+
 
 c_mat_clean = c_mat_clean %>%
   mutate(dep_anx_1 = dep_anx +1)
 
 dep_anx_log_lin = glm(log(dep_anx_1) ~ telehealth , data = c_mat_clean, weights = ipw_var)
-summary(dep_anx_log_lin)
+dep_anx_log_lin_sum = dep_anx_log_lin %>%
+  tidy() %>%
+  mutate_at(.vars = c("estimate", "std.error"), exp) %>%
+  mutate_at(2:5, round, 3)
 
-dep_anx_lin_lin = glm(dep_anx_1 ~ telehealth , data = c_mat_clean, weights = ipw_var)
-summary(dep_anx_lin_lin)
+dep_anx_log_lin_sum
 
+
+c_mat_clean = c_mat_clean %>%
+  mutate(substance_days_1 = substance_days +1)
+
+sub_log_lin = glm(log(substance_days_1) ~ telehealth , data = c_mat_clean, weights = ipw_var)
+sub_log_lin_sum = sub_log_lin %>%
+  tidy() %>%
+  mutate_at(.vars = c("estimate", "std.error"), exp) %>%
+  mutate_at(2:5, round, 3)
+sub_log_lin_sum
 
 ```
 
@@ -139,10 +150,8 @@ barc_10_mat_clean = barc_10_mat %>%
   rowwise()%>%
     mutate(hos_er = sum(c_across(4:6))) %>%
   mutate(telehealth = if_else(AssessmentDate >= "2020-04-01", 1, 0)) %>%
-  mutate(face_to_face = if_else(AssessmentDate >= "2020-04-01", 0, 1))%>%
-  select(!c(rle_days_hosp_med, rle_days_hosp_psych, rle_er_visits))
+  mutate(face_to_face = if_else(AssessmentDate >= "2020-04-01", 0, 1))
 
-barc_10_mat_clean
 #Successfully removed March
 #barc_10_mat[order(barc_10_mat$AssessmentDate),][1200:1300,]
 
@@ -162,13 +171,13 @@ dim(time_0_1)
 time_0_1_2 = time_0_1 %>% inner_join(time_2, by = "SourceClient_ID")
 time_0_1_2 = data.frame(time_0_1_2)
 library(reshape2)
-barc_10_mat_clean_long =  reshape(time_0_1_2, varying = list(c("AssessmentDate.x", "AssessmentDate.y", "AssessmentDate"), c("rcs_10_item_score.x", "rcs_10_item_score.y", "rcs_10_item_score"), c("hos_er.x", "hos_er.y", "hos_er"), c("time.x", "time.y", "time"),  c("telehealth.x", "telehealth.y", "telehealth"), c("face_to_face.x", "face_to_face.y", "face_to_face")), times = c(0,1,2), direction = "long")
+barc_10_mat_clean_long =  reshape(time_0_1_2, varying = list(c("AssessmentDate.x", "AssessmentDate.y", "AssessmentDate"), c("rcs_10_item_score.x", "rcs_10_item_score.y", "rcs_10_item_score"), c("hos_er.x", "hos_er.y", "hos_er"), c("time.x", "time.y", "time"),  c("telehealth.x", "telehealth.y", "telehealth"), c("face_to_face.x", "face_to_face.y", "face_to_face"), c("rle_days_hosp_med.x", "rle_days_hosp_med.y", "rle_days_hosp_med"), c("rle_days_hosp_psych.x", "rle_days_hosp_psych.y", "rle_days_hosp_psych"),c("rle_er_visits.x", "rle_er_visits.y", "rle_er_visits")), times = c(0,1,2), direction = "long")
 barc_10_mat_clean_long
 ```
 
 Do this earlier clean data
 ```{r}
-apply(barc_10_mat_clean_long[c(2, 4:7)], 2, function(x){describe.factor(x)})
+apply(barc_10_mat_clean_long[c(2, 4:11)], 2, function(x){describe.factor(x)})
 barc_10_mat_clean_long
 ```
 Get means and percentage changes like above
@@ -191,31 +200,6 @@ p_change_out
 names(wil_out) = c("rcs_10_item_score.x", "hos_er.x")
 wil_out
 
-```
-
-
-Try Bayesian log with BARC-10 scores
-```{r}
-library(rstanarm)
-my_prior = normal(location = 0, scale = exp(.2), autoscale = FALSE)
-
-stan_hcs_log = stan_glm(log(rcs_10_item_score.x) ~ time*face_to_face.x + hos_er.x, data = barc_10_mat_clean_long, seed =  124)
-
-stan_log_fun = function(dat){
-  dat = round(dat$stan_summary[,c(1,3,4,10)],4)
-  dat = data.frame(dat)
-  dat = dat %>%
-    slice(-c(dim(dat)[1]))
-  dat
-  ## To get percentage change interpretation need to exp the parameter estimates
-  dat = round(exp(dat),3)
-  ### Creates a percentage instead 1 + % 
-  dat= dat - 1
-  return(dat)
-}
-
-stan_hcs_log_sum = stan_log_fun(stan_hcs_log)
-stan_hcs_log_sum
 ```
 ##################
 Look into the increase in reported hospitalizations and er visits
@@ -241,6 +225,32 @@ plot_means = ggplot(data =telehealth_time_describe, aes(x = time, y = hos_er_mea
   geom_text(aes(label = hos_er_mean), position=position_dodge(width=.8), vjust=-0.20)
 plot_means$labels$colour = c("Telemental \n health")
 plot_means
+```
+
+
+
+Try Bayesian log with BARC-10 scores
+```{r}
+library(rstanarm)
+my_prior = normal(location = 0, scale = exp(.2), autoscale = FALSE)
+
+stan_hcs_log = stan_glm(log(rcs_10_item_score.x) ~ time*face_to_face.x + hos_er.x, data = barc_10_mat_clean_long, seed =  124)
+
+stan_log_fun = function(dat){
+  dat = round(dat$stan_summary[,c(1,3,4,10)],4)
+  dat = data.frame(dat)
+  dat = dat %>%
+    slice(-c(dim(dat)[1]))
+  dat
+  ## To get percentage change interpretation need to exp the parameter estimates
+  dat = round(exp(dat),3)
+  ### Creates a percentage instead 1 + % 
+  dat= dat - 1
+  return(dat)
+}
+
+stan_hcs_log_sum = stan_log_fun(stan_hcs_log)
+stan_hcs_log_sum
 ```
 
 Try hurdle model
